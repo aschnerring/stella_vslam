@@ -45,3 +45,11 @@ cmake-build-release/
 
 # vcpkg
 /3rd/vcpkg/
+
+# added by Alex
+.vscode
+CMakeCache.txt
+CMakeFiles/
+*.cmake
+CMakeLists.txt.user
+Makefile
