@@ -45,6 +45,8 @@ cmake-build-release/
 
 # vcpkg
 /3rd/vcpkg/
+/3rd/filesystem/
+/3rd/tinycolormap/
 
 # added by Alex
 .vscode
@@ -53,3 +55,12 @@ CMakeFiles/
 *.cmake
 CMakeLists.txt.user
 Makefile
+
+eeprom.bin
+install_manifest.txt
+mav.parm
+mav.tlog
+mav.tlog.raw
+package-lock.json
+terrain
+viewer/

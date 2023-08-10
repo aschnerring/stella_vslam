@@ -8,8 +8,8 @@
 namespace stella_vslam {
 namespace marker_model {
 
-base::base(double width)
-    : width_(width) {
+base::base(double width, int max_id_marker)
+    : width_(width), max_id_marker(max_id_marker) {
     spdlog::debug("CONSTRUCT: marker_model::base");
     corners_pos_.resize(4);
     corners_pos_.at(0) << -width / 2.0, width / 2.0, 0.0;

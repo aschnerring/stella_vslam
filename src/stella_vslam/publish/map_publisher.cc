@@ -1,5 +1,6 @@
 #include "stella_vslam/data/landmark.h"
 #include "stella_vslam/data/keyframe.h"
+#include "stella_vslam/data/marker.h"
 #include "stella_vslam/data/map_database.h"
 #include "stella_vslam/publish/map_publisher.h"
 
@@ -66,6 +67,33 @@ unsigned int map_publisher::get_landmarks(std::vector<std::shared_ptr<data::land
     local_landmarks = std::set<std::shared_ptr<data::landmark>>(_local_landmarks.begin(), _local_landmarks.end());
     return map_db_->get_num_landmarks();
 }
+
+
+unsigned int map_publisher::get_markers(std::vector<std::shared_ptr<data::marker>>& all_markers) {
+    auto roots = map_db_->get_spanning_roots();
+    if (roots.empty()) {
+        return 0;
+    }
+    auto keyfrms = roots.back()->graph_node_->get_keyframes_from_root();
+    std::unordered_set<unsigned int> already_found_markers_ids;
+    all_markers.clear();
+    for (const auto& keyfrm : keyfrms) {
+        for (const auto& mkr : keyfrm->get_markers()) {
+            if (!mkr) {
+                continue;
+            }
+            if (already_found_markers_ids.count(mkr->id_)) {
+                continue;
+            }
+
+            already_found_markers_ids.insert(mkr->id_);
+            all_markers.push_back(mkr);
+        }
+    }
+
+    return map_db_->get_num_markers();
+}
+
 
 } // namespace publish
 } // namespace stella_vslam

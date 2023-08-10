@@ -3,6 +3,7 @@
 #include "stella_vslam/data/keyframe.h"
 #include "stella_vslam/data/landmark.h"
 #include "stella_vslam/data/marker.h"
+#include "stella_vslam/data/marker2d.h" 
 #include "stella_vslam/data/map_database.h"
 #include "stella_vslam/data/bow_database.h"
 #include "stella_vslam/data/camera_database.h"
@@ -173,6 +174,11 @@ nlohmann::json keyframe::to_json() const {
         loop_edge_ids.push_back(loop_edge->id_);
     }
 
+    // extract marker2d information
+    nlohmann::json markers2d_info;
+    for (const auto& marker2dim : markers_2d_) {
+        markers2d_info.push_back(marker2dim.second.marker2d_to_json());
+    }
     return {{"ts", timestamp_},
             {"cam", camera_->name_},
             {"orb_params", orb_params_->name_},
@@ -186,6 +192,8 @@ nlohmann::json keyframe::to_json() const {
             {"depths", frm_obs_.depths_},
             {"descs", convert_descriptors_to_json(frm_obs_.descriptors_)},
             {"lm_ids", landmark_ids},
+            // marker2d information
+            {"markers_2d", markers2d_info},
             // graph information
             {"span_parent", spanning_parent ? spanning_parent->id_ : -1},
             {"span_children", spanning_child_ids},

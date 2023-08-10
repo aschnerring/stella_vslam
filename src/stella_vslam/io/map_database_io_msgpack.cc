@@ -1,5 +1,6 @@
 #include "stella_vslam/data/frame.h"
 #include "stella_vslam/data/keyframe.h"
+#include "stella_vslam/data/marker.h"
 #include "stella_vslam/data/landmark.h"
 #include "stella_vslam/data/camera_database.h"
 #include "stella_vslam/data/orb_params_database.h"
@@ -20,11 +21,20 @@ bool map_database_io_msgpack::save(const std::string& path,
                                    const data::orb_params_database* const orb_params_db,
                                    const data::map_database* const map_db) {
     std::lock_guard<std::mutex> lock(data::map_database::mtx_database_);
-
+    
     assert(cam_db && orb_params_db && map_db);
     const auto cameras = cam_db->to_json();
     const auto orb_params = orb_params_db->to_json();
     nlohmann::json keyfrms;
+
+    nlohmann::json marker_json;
+
+    // Iterate over the markers and add their JSON representations to the marker_json object
+    const auto markers = map_db->get_all_markers();
+    for (const auto& marker : markers) {
+        marker_json.push_back(marker->to_json());
+    }
+
     nlohmann::json landmarks;
     map_db->to_json(keyfrms, landmarks);
 
@@ -32,6 +42,7 @@ bool map_database_io_msgpack::save(const std::string& path,
                         {"orb_params", orb_params},
                         {"keyframes", keyfrms},
                         {"landmarks", landmarks},
+                        {"markers", marker_json},
                         {"keyframe_next_id", static_cast<unsigned int>(map_db->next_keyframe_id_)},
                         {"landmark_next_id", static_cast<unsigned int>(map_db->next_landmark_id_)}};
 

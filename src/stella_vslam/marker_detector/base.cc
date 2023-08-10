@@ -20,7 +20,7 @@ void base::detect(const cv::_InputArray& in_image, std::unordered_map<unsigned i
     if (in_image.empty()) {
         return;
     }
-
+  
     const auto image = in_image.getMat();
     assert(image.type() == CV_8UC1);
 
@@ -42,9 +42,9 @@ void base::detect(const cv::_InputArray& in_image, std::unordered_map<unsigned i
         double reproj_error = solve::pnp_solver::compute_pose(bearings, marker_model_->corners_pos_, rot_cm, trans_cm, num_iter_);
 
         // Create marker2d (if the pose is valid)
-        if (reproj_error < reproj_error_threshold_) {
-            markers_2d.emplace(ids[i], data::marker2d(undist_corners, bearings, rot_cm, trans_cm, ids[i], marker_model_));
-        }
+        if  ((reproj_error < reproj_error_threshold_)&& (ids[i] <=  marker_model_->max_id_marker)) {
+            markers_2d.emplace(ids[i], data::marker2d(undist_corners, bearings, rot_cm, trans_cm, ids[i], marker_model_));  
+        }   
     }
 }
 } // namespace marker_detector

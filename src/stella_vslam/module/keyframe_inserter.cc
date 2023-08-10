@@ -123,6 +123,7 @@ std::shared_ptr<data::keyframe> keyframe_inserter::create_new_keyframe(
             marker = std::make_shared<data::marker>(corners_pos_w, id_mkr2d.first, mkr2d.marker_model_);
             // add the marker to the map DB
             map_db->add_marker(marker);
+            spdlog::info("New marker has been detected with ID = {}",id_mkr2d.first);
         }
         // Set the association to the new marker
         keyfrm->add_marker(marker);

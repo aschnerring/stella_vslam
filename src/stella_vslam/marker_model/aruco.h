@@ -16,7 +16,7 @@ namespace marker_model {
 class aruco : public marker_model::base {
 public:
     //! Constructor
-    aruco(double width, int marker_size, int max_markers);
+    aruco(double width, int marker_size, int max_markers, int max_id_marker);
 
     //! Destructor
     virtual ~aruco();
@@ -24,6 +24,7 @@ public:
     //! marker definition
     int marker_size_;
     int max_markers_;
+    int max_id_marker_;
 
     //! Encode marker_model information as JSON
     virtual nlohmann::json to_json() const;

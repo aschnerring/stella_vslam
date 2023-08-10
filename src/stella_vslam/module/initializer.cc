@@ -243,10 +243,11 @@ bool initializer::create_map_for_monocular(data::bow_vocabulary* bow_vocab, data
         lms.push_back(lm);
     }
 
-    bool indefinite_scale = true;
+    bool indefinite_scale = true; 
     for (const auto& id_mkr2d : init_keyfrm->markers_2d_) {
         if (curr_keyfrm->markers_2d_.count(id_mkr2d.first)) {
             indefinite_scale = false;
+            spdlog::info(" Scaling based on marker detected in initial frame.");
             break;
         }
     }
@@ -263,6 +264,7 @@ bool initializer::create_map_for_monocular(data::bow_vocabulary* bow_vocab, data
                 // add the marker to the map DB
                 map_db_->add_marker(marker);
                 markers.push_back(marker);
+                spdlog::info("New marker has been detected with ID = {}",id_mkr2d.first);
             }
             // Set the association to the new marker
             keyfrm->add_marker(marker);
@@ -286,6 +288,7 @@ bool initializer::create_map_for_monocular(data::bow_vocabulary* bow_vocab, data
             state_ = initializer_state_t::Wrong;
             return false;
         }
+        spdlog::info("inverse median depth = {}", inv_median_depth);
         scale_map(init_keyfrm, curr_keyfrm, inv_median_depth * scaling_factor_);
     }
 
@@ -301,8 +304,8 @@ void initializer::scale_map(const std::shared_ptr<data::keyframe>& init_keyfrm, 
     // scaling keyframes
     Mat44_t cam_pose_cw = curr_keyfrm->get_pose_cw();
     cam_pose_cw.block<3, 1>(0, 3) *= scale;
-    curr_keyfrm->set_pose_cw(cam_pose_cw);
-
+    curr_keyfrm->set_pose_cw(cam_pose_cw); 
+    
     // scaling landmarks
     const auto landmarks = init_keyfrm->get_landmarks();
     for (const auto& lm : landmarks) {

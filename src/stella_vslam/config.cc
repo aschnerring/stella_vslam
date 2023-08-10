@@ -31,7 +31,8 @@ config::config(const YAML::Node& yaml_node, const std::string& config_file_path)
             marker_model_ = std::make_shared<marker_model::aruco>(
                 marker_model_yaml_node["width"].as<double>(),
                 marker_model_yaml_node["marker_size"].as<double>(),
-                marker_model_yaml_node["max_markers"].as<double>());
+                marker_model_yaml_node["max_markers"].as<double>(),
+                marker_model_yaml_node["max_id_marker"].as<int>());
         }
         else {
             throw std::runtime_error("Invalid marker model type :" + marker_model_type);

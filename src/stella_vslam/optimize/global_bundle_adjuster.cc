@@ -1,6 +1,7 @@
 #include "stella_vslam/data/keyframe.h"
 #include "stella_vslam/data/landmark.h"
 #include "stella_vslam/data/marker.h"
+#include "stella_vslam/data/marker2d.h"
 #include "stella_vslam/data/map_database.h"
 #include "stella_vslam/marker_model/base.h"
 #include "stella_vslam/optimize/global_bundle_adjuster.h"
@@ -33,7 +34,8 @@ void optimize_impl(g2o::SparseOptimizer& optimizer,
                    internal::marker_vertex_container& marker_vtx_container,
                    unsigned int num_iter,
                    bool use_huber_kernel,
-                   bool* const force_stop_flag) {
+                   bool* const force_stop_flag,
+                   bool const fix_markers_for_optimization) {
     // 2. Construct an optimizer
 
     std::unique_ptr<g2o::BlockSolverBase> block_solver;
@@ -134,7 +136,7 @@ void optimize_impl(g2o::SparseOptimizer& optimizer,
         }
 
         // Convert the corners to the g2o vertex, then set it to the optimizer
-        auto corner_vertices = marker_vtx_container.create_vertices(mkr, true);
+        auto corner_vertices = marker_vtx_container.create_vertices(mkr, fix_markers_for_optimization); // This variable is set depending on where the optimization is called
         for (unsigned int corner_idx = 0; corner_idx < corner_vertices.size(); ++corner_idx) {
             const auto corner_vtx = corner_vertices[corner_idx];
             optimizer.addVertex(corner_vtx);
@@ -187,13 +189,13 @@ void global_bundle_adjuster::optimize_for_initialization(const std::vector<std::
     internal::se3::shot_vertex_container keyfrm_vtx_container(vtx_id_offset, keyfrms.size());
     // Container of the landmark vertices
     internal::landmark_vertex_container lm_vtx_container(vtx_id_offset, lms.size());
-    // Container of the landmark vertices
+    // Container of the marker vertices
     internal::marker_vertex_container marker_vtx_container(vtx_id_offset, markers.size());
 
     g2o::SparseOptimizer optimizer;
 
     optimize_impl(optimizer, keyfrms, lms, markers, is_optimized_lm, keyfrm_vtx_container, lm_vtx_container, marker_vtx_container,
-                  num_iter_, use_huber_kernel_, force_stop_flag);
+                  num_iter_, use_huber_kernel_, force_stop_flag, true);
 
     if (force_stop_flag && *force_stop_flag) {
         return;
@@ -204,13 +206,13 @@ void global_bundle_adjuster::optimize_for_initialization(const std::vector<std::
     for (auto keyfrm : keyfrms) {
         if (keyfrm->will_be_erased()) {
             continue;
-        }
+        }     
         auto keyfrm_vtx = keyfrm_vtx_container.get_vertex(keyfrm);
         const auto cam_pose_cw = util::converter::to_eigen_mat(keyfrm_vtx->estimate());
 
         keyfrm->set_pose_cw(cam_pose_cw);
     }
-
+    
     for (unsigned int i = 0; i < lms.size(); ++i) {
         if (!is_optimized_lm.at(i)) {
             continue;
@@ -230,12 +232,40 @@ void global_bundle_adjuster::optimize_for_initialization(const std::vector<std::
         lm->set_pos_in_world(pos_w);
         lm->update_mean_normal_and_obs_scale_variance();
     }
+
+    for (const auto& mkr : markers) {
+        if (!mkr) {
+            continue;
+        }
+        // Create a vector to store the updated corner positions
+        std::vector<Vec3_t, Eigen::aligned_allocator<Vec3_t>> updated_corner_positions;
+        updated_corner_positions.reserve(4);
+        for (unsigned int corner_id = 0; corner_id < 4; ++corner_id) {
+                // Get the vertex corresponding to the marker and corner ID
+                const auto corner_vertex = marker_vtx_container.get_vertex(mkr->id_, corner_id);
+                if (!corner_vertex) {
+                    continue;
+                }
+                // Get the estimated position of the corner
+                const auto& estimated_pos = corner_vertex->estimate();
+                const Vec3_t updated_corner_pos(estimated_pos[0], estimated_pos[1], estimated_pos[2]);
+
+                // Add the updated corner position to the vector
+                updated_corner_positions.push_back(updated_corner_pos);
+        }
+
+        // Set the updated corner positions in the marker
+        mkr->set_corner_pos(updated_corner_positions); //updated_corner_pos
+
+    }
 }
 
 bool global_bundle_adjuster::optimize(const std::vector<std::shared_ptr<data::keyframe>>& keyfrms,
                                       std::unordered_set<unsigned int>& optimized_keyfrm_ids,
                                       std::unordered_set<unsigned int>& optimized_landmark_ids,
+                                      std::unordered_set<unsigned int>& optimized_markers_ids,
                                       eigen_alloc_unord_map<unsigned int, Vec3_t>& lm_to_pos_w_after_global_BA,
+                                      eigen_alloc_unord_map<unsigned int, std::vector<Vec3_t, Eigen::aligned_allocator<Vec3_t>>>& mkr_to_pos_w_after_global_BA,
                                       eigen_alloc_unord_map<unsigned int, Mat44_t>& keyfrm_to_pose_cw_after_global_BA,
                                       bool* const force_stop_flag) const {
     std::unordered_set<unsigned int> already_found_landmark_ids;
@@ -280,7 +310,7 @@ bool global_bundle_adjuster::optimize(const std::vector<std::shared_ptr<data::ke
     internal::se3::shot_vertex_container keyfrm_vtx_container(vtx_id_offset, keyfrms.size());
     // Container of the landmark vertices
     internal::landmark_vertex_container lm_vtx_container(vtx_id_offset, lms.size());
-    // Container of the landmark vertices
+    // Container of the marker vertices
     internal::marker_vertex_container marker_vtx_container(vtx_id_offset, markers.size());
 
     g2o::SparseOptimizer optimizer;
@@ -289,7 +319,7 @@ bool global_bundle_adjuster::optimize(const std::vector<std::shared_ptr<data::ke
     optimizer.addPostIterationAction(terminateAction);
 
     optimize_impl(optimizer, keyfrms, lms, markers, is_optimized_lm, keyfrm_vtx_container, lm_vtx_container, marker_vtx_container,
-                  num_iter_, use_huber_kernel_, force_stop_flag);
+                  num_iter_, use_huber_kernel_, force_stop_flag, false);
 
     if (force_stop_flag && *force_stop_flag && !terminateAction->stopped_by_terminate_action_) {
         return false;
@@ -328,6 +358,33 @@ bool global_bundle_adjuster::optimize(const std::vector<std::shared_ptr<data::ke
 
         lm_to_pos_w_after_global_BA[lm->id_] = pos_w;
         optimized_landmark_ids.insert(lm->id_);
+    }
+
+    for (unsigned int marker_idx = 0; marker_idx < markers.size(); ++marker_idx) {
+        auto mkr = markers.at(marker_idx);
+        if (!mkr) {
+            continue;
+        }
+        // Create a vector to store the updated corner positions
+        std::vector<Vec3_t, Eigen::aligned_allocator<Vec3_t>> updated_corner_positions;
+        updated_corner_positions.reserve(4);
+        for (unsigned int corner_id = 0; corner_id < 4; ++corner_id) {
+                // Get the vertex corresponding to the marker and corner ID
+                const auto corner_vertex = marker_vtx_container.get_vertex(mkr->id_, corner_id);
+                if (!corner_vertex) {
+                    continue;
+                }
+                // Get the estimated position of the corner
+                const auto& estimated_pos = corner_vertex->estimate();
+                const Vec3_t updated_corner_pos(estimated_pos[0], estimated_pos[1], estimated_pos[2]);
+
+                // Add the updated corner position to the vector
+                updated_corner_positions.push_back(updated_corner_pos);
+        }
+
+        mkr_to_pos_w_after_global_BA[mkr->id_] = updated_corner_positions;
+        optimized_markers_ids.insert(mkr->id_);
+
     }
 
     return true;

@@ -41,7 +41,9 @@ public:
     bool optimize(const std::vector<std::shared_ptr<data::keyframe>>& keyfrms,
                   std::unordered_set<unsigned int>& optimized_keyfrm_ids,
                   std::unordered_set<unsigned int>& optimized_landmark_ids,
+                  std::unordered_set<unsigned int>& optimized_markers_ids,
                   eigen_alloc_unord_map<unsigned int, Vec3_t>& lm_to_pos_w_after_global_BA,
+                  eigen_alloc_unord_map<unsigned int, std::vector<Vec3_t, Eigen::aligned_allocator<Vec3_t>>>& mkr_to_pos_w_after_global_BA,
                   eigen_alloc_unord_map<unsigned int, Mat44_t>& keyfrm_to_pose_cw_after_global_BA,
                   bool* const force_stop_flag = nullptr) const;
 

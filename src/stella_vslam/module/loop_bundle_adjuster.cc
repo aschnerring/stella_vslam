@@ -1,7 +1,9 @@
 #include "stella_vslam/mapping_module.h"
 #include "stella_vslam/data/keyframe.h"
 #include "stella_vslam/data/landmark.h"
+#include "stella_vslam/data/marker.h"
 #include "stella_vslam/data/map_database.h"
+#include "stella_vslam/marker_model/base.h"
 #include "stella_vslam/module/loop_bundle_adjuster.h"
 #include "stella_vslam/optimize/global_bundle_adjuster.h"
 
@@ -40,12 +42,15 @@ void loop_bundle_adjuster::optimize(const std::shared_ptr<data::keyframe>& curr_
 
     std::unordered_set<unsigned int> optimized_keyfrm_ids;
     std::unordered_set<unsigned int> optimized_landmark_ids;
+    std::unordered_set<unsigned int> optimized_markers_ids;
     eigen_alloc_unord_map<unsigned int, Vec3_t> lm_to_pos_w_after_global_BA;
+    eigen_alloc_unord_map<unsigned int, std::vector<Vec3_t, Eigen::aligned_allocator<Vec3_t>>> mkr_to_pos_w_after_global_BA;
     eigen_alloc_unord_map<unsigned int, Mat44_t> keyfrm_to_pose_cw_after_global_BA;
     const auto global_BA = optimize::global_bundle_adjuster(num_iter_, false);
     bool ok = global_BA.optimize(curr_keyfrm->graph_node_->get_keyframes_from_root(),
-                                 optimized_keyfrm_ids, optimized_landmark_ids,
+                                 optimized_keyfrm_ids, optimized_landmark_ids, optimized_markers_ids,
                                  lm_to_pos_w_after_global_BA,
+                                 mkr_to_pos_w_after_global_BA,
                                  keyfrm_to_pose_cw_after_global_BA, &abort_loop_BA_);
 
     {
@@ -157,6 +162,72 @@ void loop_bundle_adjuster::optimize(const std::shared_ptr<data::keyframe>& curr_
             }
             lm->update_mean_normal_and_obs_scale_variance();
         }
+
+        // 2.1. add markers
+        std::unordered_set<unsigned int> already_found_marker_ids;
+        std::vector<std::shared_ptr<data::marker>> markers;
+        for (const auto& keyfrm : keyfrms) {
+            const auto ngh_markers = keyfrm->get_markers();
+            for (const auto& mkr : ngh_markers) {
+                if (!mkr) {
+                    continue;
+                }
+                if (already_found_marker_ids.count(mkr->id_)) {
+                    continue;
+                }
+
+                already_found_marker_ids.insert(mkr->id_);
+                markers.push_back(mkr);
+            }
+        }
+
+        for (const auto& mkr : markers) {
+            if (!mkr) {
+                continue;
+            }
+
+            if (optimized_markers_ids.count(mkr->id_)) {
+                // if `mkr` is optimized by the loop BA
+
+                // update with the optimized position
+                mkr->set_corner_pos(mkr_to_pos_w_after_global_BA.at(mkr->id_));
+            }
+            else{
+                // if `mkr` is NOT optimized by the loop BA
+
+                if (mkr->observations_.empty()) {
+                    // Handle the case when observations_ is empty, e.g., continue or skip this marker
+                    continue;
+                }
+                // correct the position according to the move of the camera pose of the reference keyframe
+                auto ref_keyfrm = mkr->observations_[0];
+                assert(optimized_keyfrm_ids.count(ref_keyfrm->id_));
+
+                // convert the position to the camera-reference using the camera pose BEFORE the correction
+                const Mat44_t pose_cw_before_BA = keyfrm_to_cam_pose_cw_before_BA.at(ref_keyfrm->id_);
+                const Mat33_t rot_cw_before_BA = pose_cw_before_BA.block<3, 3>(0, 0);
+                const Vec3_t trans_cw_before_BA = pose_cw_before_BA.block<3, 1>(0, 3);
+
+                // Create a vector to store the updated corner positions
+                std::vector<Vec3_t, Eigen::aligned_allocator<Vec3_t>> corners_pose_w;
+                corners_pose_w.reserve(4);
+
+                for (unsigned int corner_id = 0; corner_id < 4; ++corner_id) {
+                    const Vec3_t pos_w_before_correction = mkr->corners_pos_w_[corner_id];
+                    const Vec3_t pos_c = rot_cw_before_BA * pos_w_before_correction + trans_cw_before_BA;
+                    // convert the position to the world-reference using the camera pose AFTER the correction
+                    const Mat44_t cam_pose_wc = ref_keyfrm->get_pose_wc();
+                    const Mat33_t rot_wc = cam_pose_wc.block<3, 3>(0, 0);
+                    const Vec3_t trans_wc = cam_pose_wc.block<3, 1>(0, 3);
+                    const Vec3_t pos_w = rot_wc * pos_c + trans_wc;
+                    // Add the updated corner position to the vector
+                    corners_pose_w.push_back(pos_w);
+                }
+                // Set the updated corner positions in the marker
+                mkr->set_corner_pos(corners_pose_w); //updated_corner_pos 
+            }
+        }
+
 
         mapper_->resume();
         loop_BA_is_running_ = false;

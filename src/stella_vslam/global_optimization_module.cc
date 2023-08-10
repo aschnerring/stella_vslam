@@ -3,7 +3,9 @@
 #include "stella_vslam/tracking_module.h"
 #include "stella_vslam/data/keyframe.h"
 #include "stella_vslam/data/landmark.h"
+#include "stella_vslam/data/marker.h"
 #include "stella_vslam/data/map_database.h"
+#include "stella_vslam/marker_model/base.h"
 #include "stella_vslam/match/fuse.h"
 #include "stella_vslam/util/converter.h"
 #include "stella_vslam/util/yaml.h"
@@ -258,6 +260,8 @@ void global_optimization_module::correct_loop() {
 
         // correct covibisibility landmark positions
         correct_covisibility_landmarks(Sim3s_nw_before_correction, Sim3s_nw_after_correction, found_lm_to_ref_keyfrm_id);
+        // correct covibisibility markers positions
+        correct_covisibility_markers(Sim3s_nw_before_correction, Sim3s_nw_after_correction);
         // correct covisibility keyframe camera poses
         correct_covisibility_keyframes(Sim3s_nw_after_correction);
     }
@@ -376,6 +380,48 @@ void global_optimization_module::correct_covisibility_landmarks(const module::ke
             // update geometry
             lm->update_mean_normal_and_obs_scale_variance();
         }
+    }
+}
+
+
+void global_optimization_module::correct_covisibility_markers(const module::keyframe_Sim3_pairs_t& Sim3s_nw_before_correction,
+                                                                const module::keyframe_Sim3_pairs_t& Sim3s_nw_after_correction) const {
+    std::unordered_set<unsigned int> already_found_marker_ids;
+    for (const auto& t : Sim3s_nw_after_correction) {
+        auto neighbor = t.first;
+        // neighbor->world AFTER loop correction
+        const auto Sim3_wn_after_correction = t.second.inverse();
+        // world->neighbor BEFORE loop correction
+        const auto& Sim3_nw_before_correction = Sim3s_nw_before_correction.at(neighbor);
+
+        const auto ngh_markers = neighbor->get_markers();
+
+        for (const auto& mkr : ngh_markers) {
+            if (!mkr) {
+                continue;
+            }
+            // avoid transforming the marker more than once
+            if (already_found_marker_ids.count(mkr->id_)) {
+                continue;
+            }
+            // register the marker transformed
+            already_found_marker_ids.insert(mkr->id_);
+            // Create a vector to store the updated corner positions
+            std::vector<Vec3_t, Eigen::aligned_allocator<Vec3_t>> updated_corner_positions;
+            updated_corner_positions.reserve(4);
+
+            for (unsigned int corner_id = 0; corner_id < mkr->corners_pos_w_.size(); ++corner_id) {
+                
+                const Vec3_t pos_w_before_correction = mkr->corners_pos_w_[corner_id];
+                const Vec3_t pos_w_after_correction = Sim3_wn_after_correction.map(Sim3_nw_before_correction.map(pos_w_before_correction));
+
+                // Add the updated corner position to the vector
+                updated_corner_positions.push_back(pos_w_after_correction);
+            }
+            // Set the updated corner positions in the marker
+            mkr->set_corner_pos(updated_corner_positions); //updated_corner_pos
+        }
+
     }
 }
 

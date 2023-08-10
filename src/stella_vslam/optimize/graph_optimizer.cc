@@ -1,6 +1,8 @@
 #include "stella_vslam/data/keyframe.h"
 #include "stella_vslam/data/landmark.h"
+#include "stella_vslam/data/marker.h"
 #include "stella_vslam/data/map_database.h"
+#include "stella_vslam/marker_model/base.h"
 #include "stella_vslam/optimize/graph_optimizer.h"
 #include "stella_vslam/optimize/terminate_action.h"
 #include "stella_vslam/optimize/internal/sim3/shot_vertex.h"
@@ -61,6 +63,23 @@ void graph_optimizer::optimize(const std::shared_ptr<data::keyframe>& loop_keyfr
         }
     }
 
+    // 2.1. add markers
+    std::unordered_set<unsigned int> already_found_marker_ids;
+    std::vector<std::shared_ptr<data::marker>> markers;
+    for (const auto& keyfrm : all_keyfrms) {
+        for (const auto& mkr : keyfrm->get_markers()) {
+            if (!mkr) {
+                continue;
+            }
+            if (already_found_marker_ids.count(mkr->id_)) {
+                continue;
+            }
+
+            already_found_marker_ids.insert(mkr->id_);
+            markers.push_back(mkr);
+        }
+    }
+
     // Transform the pre-modified poses of all the keyframes to Sim3, and save them
     eigen_alloc_unord_map<unsigned int, g2o::Sim3> Sim3s_cw;
     // Save the added vertices
@@ -79,7 +98,7 @@ void graph_optimizer::optimize(const std::shared_ptr<data::keyframe>& loop_keyfr
         // BEFORE optimization, check if the poses have been already modified
         const auto iter = pre_corrected_Sim3s.find(keyfrm);
         if (iter != pre_corrected_Sim3s.end()) {
-            // BEFORE optimization, set the already-modified poses for verices
+            // BEFORE optimization, set the already-modified poses for vertices
             Sim3s_cw[id] = iter->second;
             keyfrm_vtx->setEstimate(iter->second);
         }
@@ -300,6 +319,40 @@ void graph_optimizer::optimize(const std::shared_ptr<data::keyframe>& loop_keyfr
             lm->set_pos_in_world(corrected_pos_w);
             lm->update_mean_normal_and_obs_scale_variance();
         }
+
+        // Update the markers
+        for (const auto& mkr : markers) {
+            if (!mkr) {
+                continue;
+            }
+            if (mkr->observations_.empty()) {
+                // Handle the case when observations_ is empty, e.g., continue or skip this marker
+                continue;
+            }
+
+            auto ref_keyframe = mkr->observations_[0];
+            const auto id = ref_keyframe->id_;
+
+            const g2o::Sim3& Sim3_cw = Sim3s_cw.at(id);
+            const g2o::Sim3& corrected_Sim3_wc = corrected_Sim3s_wc.at(id);
+
+
+            // Create a vector to store the updated corner positions
+            std::vector<Vec3_t, Eigen::aligned_allocator<Vec3_t>> updated_corner_positions;
+            updated_corner_positions.reserve(4);
+
+            for (unsigned int corner_id = 0; corner_id < mkr->corners_pos_w_.size(); ++corner_id) {
+                
+                const Vec3_t pos_w_before_correction = mkr->corners_pos_w_[corner_id];
+                const Vec3_t pos_w_after_correction = corrected_Sim3_wc.map(Sim3_cw.map(pos_w_before_correction));
+
+                // Add the updated corner position to the vector
+                updated_corner_positions.push_back(pos_w_after_correction);
+            }
+            // Set the updated corner positions in the marker
+            mkr->set_corner_pos(updated_corner_positions); //updated_corner_pos
+        }
+
     }
 }
 

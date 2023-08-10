@@ -1,4 +1,5 @@
 #include "stella_vslam/data/marker2d.h"
+#include <nlohmann/json.hpp>
 
 namespace stella_vslam {
 namespace data {
@@ -15,6 +16,20 @@ eigen_alloc_vector<Vec3_t> marker2d::compute_corners_pos_w(const Mat44_t& cam_po
         corners_pos_w.push_back(rot_wc * (rot_cm_ * corner_pos + trans_cm_) + trans_wc);
     }
     return corners_pos_w;
+}
+
+nlohmann::json marker2d::marker2d_to_json() const {
+    nlohmann::json marker2d_json;
+    marker2d_json["id"] = id_;
+
+    // Convert corners_pos_w_ vector to a JSON array
+    nlohmann::json corners_json = nlohmann::json::array();
+    for (const auto& corner : undist_corners_) {
+        corners_json.push_back({corner.x, corner.y});
+    }
+    marker2d_json["undist_corners"] = corners_json;
+
+    return marker2d_json;
 }
 
 } // namespace data

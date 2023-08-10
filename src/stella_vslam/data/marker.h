@@ -2,6 +2,7 @@
 #define STELLA_VSLAM_DATA_MARKER_H
 
 #include "stella_vslam/type.h"
+#include <nlohmann/json_fwd.hpp> 
 
 #include <mutex>
 
@@ -23,7 +24,7 @@ public:
     //! constructor
     marker(const eigen_alloc_vector<Vec3_t>& corners_pos_w, unsigned int id, const std::shared_ptr<marker_model::base>& marker_model);
 
-    void set_corner_pos(const eigen_alloc_vector<Vec3_t>& corner_pos_w);
+    void set_corner_pos(const eigen_alloc_vector<Vec3_t>& corner_pos_w); 
 
     //! corner positions
     eigen_alloc_vector<Vec3_t> corners_pos_w_;
@@ -38,6 +39,9 @@ public:
     std::vector<std::shared_ptr<keyframe>> observations_;
 
     mutable std::mutex mtx_position_;
+
+    // Define the to_json function for the Marker class
+    nlohmann::json to_json() const; 
 };
 
 } // namespace data

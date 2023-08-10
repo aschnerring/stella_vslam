@@ -87,10 +87,14 @@ system::system(const std::shared_ptr<config>& cfg, const std::string& vocab_file
         if (marker_detector::aruco::is_valid()) {
             spdlog::debug("marker detection: enabled");
             marker_detector_ = new marker_detector::aruco(camera_, cfg->marker_model_);
+            spdlog::info("marker detection: enabled");
         }
         else {
             spdlog::warn("Valid marker_detector is not installed");
         }
+    }else {
+        spdlog::debug("marker detection: disabled");
+        spdlog::info("marker detection: disabled");
     }
 
     // connect modules each other
@@ -309,7 +313,7 @@ data::frame system::create_monocular_frame(const cv::Mat& img, const double time
     std::unordered_map<unsigned int, data::marker2d> markers_2d;
     if (marker_detector_) {
         marker_detector_->detect(img_gray, markers_2d);
-    }
+    } 
 
     return data::frame(timestamp, camera_, orb_params_, frm_obs, std::move(markers_2d));
 }

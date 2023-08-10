@@ -99,7 +99,7 @@ void local_bundle_adjuster_g2o::optimize(data::map_database* map_db,
             if (local_mkrs.count(local_mkr->id_)) {
                 continue;
             }
-
+            
             local_mkrs[local_mkr->id_] = local_mkr;
         }
     }
@@ -259,7 +259,7 @@ void local_bundle_adjuster_g2o::optimize(data::map_database* map_db,
         }
 
         // Convert the corners to the g2o vertex, then set it to the optimizer
-        auto corner_vertices = marker_vtx_container.create_vertices(mkr, true);
+        auto corner_vertices = marker_vtx_container.create_vertices(mkr, false);
         for (unsigned int corner_idx = 0; corner_idx < corner_vertices.size(); ++corner_idx) {
             const auto corner_vtx = corner_vertices[corner_idx];
             optimizer.addVertex(corner_vtx);
@@ -391,6 +391,36 @@ void local_bundle_adjuster_g2o::optimize(data::map_database* map_db,
             auto lm_vtx = lm_vtx_container.get_vertex(local_lm);
             local_lm->set_pos_in_world(lm_vtx->estimate());
             local_lm->update_mean_normal_and_obs_scale_variance();
+        }
+        // Update the marker positions
+        for (const auto& id_local_mkr_pair : local_mkrs) {
+            const auto& mkr = id_local_mkr_pair.second;
+            if (!mkr) {
+                continue;
+            }
+
+            // Create a vector to store the updated corner positions
+            std::vector<Vec3_t, Eigen::aligned_allocator<Vec3_t>> updated_corner_positions;
+            updated_corner_positions.reserve(4);
+
+            // Update all four corners of the marker
+            for (unsigned int corner_id = 0; corner_id < 4; ++corner_id) {
+                // Get the vertex corresponding to the marker and corner ID
+                const auto corner_vertex = marker_vtx_container.get_vertex(mkr->id_, corner_id);
+                if (!corner_vertex) {
+                    continue;
+                }
+
+                // Get the estimated position of the corner
+                const auto& estimated_pos = corner_vertex->estimate();
+                const Vec3_t updated_corner_pos(estimated_pos[0], estimated_pos[1], estimated_pos[2]);
+
+                // Add the updated corner position to the vector
+                updated_corner_positions.push_back(updated_corner_pos);
+            }
+            
+            // Set the updated corner positions in the marker
+            mkr->set_corner_pos(updated_corner_positions); //updated_corner_pos
         }
     }
 }

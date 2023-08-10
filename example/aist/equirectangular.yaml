@@ -44,3 +44,10 @@ LoopDetector:
 
 System:
   map_format: "msgpack"
+
+MarkerModel:
+  type: "aruco"
+  width: 3     # Specify the width of the marker in meters
+  marker_size: 4   # Specify the size of the marker in meters
+  max_markers: 50   # Specify the maximum number of markers to detect
+
